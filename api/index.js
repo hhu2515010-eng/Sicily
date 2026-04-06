@@ -1,16 +1,25 @@
 export default async function handler(req, res) {
-  const { pathname, search } = new URL(req.url, `http://${req.headers.host}`);
-  const targetUrl = `https://generativelanguage.googleapis.com${pathname}${search}`;
+  try {
+    const targetUrl = new URL(req.url, "https://generativelanguage.googleapis.com");
+    const headers = {};
 
-  const proxyResponse = await fetch(targetUrl, {
-    method: req.method,
-    headers: {
-      ...req.headers,
-      Host: 'generativelanguage.googleapis.com'
-    },
-    body: req.method === 'POST' ? req.body : undefined
-  });
+    for (const [key, val] of Object.entries(req.headers)) {
+      if (key.toLowerCase() === "authorization") {
+        headers["x-goog-api-key"] = val.toString().replace(/^Bearer /i, "");
+      } else {
+        headers[key] = val;
+      }
+    }
 
-  const data = await proxyResponse.text();
-  res.status(proxyResponse.status).setHeader('Content-Type', proxyResponse.headers.get('Content-Type')).send(data);
+    const response = await fetch(targetUrl.toString(), {
+      method: req.method,
+      headers,
+      body: req.method === "GET" ? undefined : JSON.stringify(req.body),
+    });
+
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: "proxy failed" });
+  }
 }
