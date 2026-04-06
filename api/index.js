@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   // 3. 模型列表接口（/v1/models → 适配 OpenAI 格式）
-  if (req.url.startsWith('/v1/models')) {
+  if (req.url.includes('/v1/models')) {
     const geminiUrl = new URL('https://generativelanguage.googleapis.com/v1beta/models');
     geminiUrl.searchParams.set('key', apiKey);
 
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
   }
 
   // 4. 聊天接口（/v1/chat/completions → 双向格式转换）
-  if (req.url.startsWith('/v1/chat/completions')) {
+  if (req.url.includes('/v1/chat/completions')) {
     const { model, messages } = req.body || {};
     
     if (!model || !messages) {
@@ -65,6 +65,49 @@ export default async function handler(req, res) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents })
       });
+
+      const geminiData = await geminiRes.json();
+      const replyText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // 转成 OpenAI 标准聊天响应格式
+      return res.json({
+        id: `chatcmpl-${Date.now()}`,
+        object: 'chat.completion',
+        created: Date.now(),
+        model: model,
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: replyText },
+          finish_reason: 'stop'
+        }],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: 'Chat fetch failed: ' + e.message });
+    }
+  }
+
+  // 5. 兜底：其他请求直接转发
+  const geminiUrl = new URL(req.url, 'https://generativelanguage.googleapis.com');
+  geminiUrl.searchParams.set('key', apiKey);
+
+  try {
+    const geminiRes = await fetch(geminiUrl.toString(), {
+      method: req.method,
+      headers: { 'Content-Type': 'application/json' },
+      body: req.method === 'GET' ? undefined : JSON.stringify(req.body)
+    });
+
+    const data = await geminiRes.json();
+    return res.status(geminiRes.status).json(data);
+  } catch (e) {
+    return res.status(500).json({ error: 'Proxy failed: ' + e.message });
+  }
+}
 
       const geminiData = await geminiRes.json();
       const replyText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
