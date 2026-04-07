@@ -1,5 +1,3 @@
-const GEMINI_API_KEY = "AIzaSyDY8qwZJRgMgQ4p8qrklLlOc_h3XmunLWM";
-
 module.exports = async function handler(req, res) {
   // 跨域配置
   res.setHeader('Access-Control-Allow-Origin', '*');
